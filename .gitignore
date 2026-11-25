@@ -5,3 +5,13 @@ data/raw/
 media/
 assets/
 __pycache__/
+data/lltk/*.png
+data/lltk/*.npy
+data/raw2/
+data/zoom2/
+data/*.npy
+data/park.npz
+data/park2_txt.txt
+tools/georef.py
+tools/media.py
+tools/ortho.py

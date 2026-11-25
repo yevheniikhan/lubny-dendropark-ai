@@ -33,10 +33,9 @@ try:
 except Exception:
     ee.Authenticate(); ee.Initialize(project=PROJECT)
 
-# Дендропарк імені В. Байтали (Лубни, вул. Драгоманова). Контур наближений: його обведено за картою
-# центральної частини парку з «зіркою». Уточніть контур на карті в кроці 1.
+# Дендропарк імені В. Д. Байтали, Лубни. Межа – картосхема з буклета коледжу, прив'язана до знімка
+# сплайном тонкої пластини (опорні точки: data/lltk/gcp.json у репозиторії).
 PARK = ee.Geometry.Polygon(PARK_COORDS)
-STAR = ee.Geometry.Point([32.99069, 49.98555])   # центр п'ятикутної «зірки» з екзотами
 CENTER = PARK.centroid(1).coordinates().getInfo()[::-1]
 UTM = 'EPSG:32636'                    # метрична проєкція для зони 36N
 print('Площа контуру, га:', round(PARK.area(1).getInfo() / 1e4, 1))""",
@@ -44,7 +43,6 @@ print('Площа контуру, га:', round(PARK.area(1).getInfo() / 1e4, 1)
 "md:## 1. Дендропарк з висоти 500 м\n\nПідкладка – мозаїка аерофото- і супутникових знімків Esri з роздільною здатністю до 0,5 м. Увімкніть шари в правому верхньому куті карти. Інструментом малювання можна обвести власний контур парку: він стане доступним як `m.user_roi`.",
 """m = geemap.Map(center=CENTER, zoom=16, basemap='Esri.WorldImagery')
 m.addLayer(ee.Image().paint(PARK, 0, 3), {'palette': ['ffd400']}, 'Контур дендропарку')
-m.addLayer(STAR, {'color': 'red'}, 'Центр «зірки»')
 m""",
 
 "md:## 2. Висота дерев, виміряна з космосу\n\nКарта висоти намету Meta і World Resources Institute (роздільна здатність 1 м) отримана нейромережею, навченою на лідарних вимірах. Подивимося, де ростуть найвищі дерева парку.",
@@ -119,7 +117,8 @@ m""",
 # sam.show_anns(cmap='Greens', add_boxes=False, alpha=0.6, title='Крони, знайдені SAM')
 # sam.raster_to_vector('park_mask.tif', 'tree_crowns.gpkg')   # полігони для QGIS""",
 
-"md:## Завдання\n\n1. Знайдіть на карті висот найвищу ділянку парку. Яка це порода? Перевірте в парку.\n2. У якому місяці NDVI найвищий? Чому листопадні й хвойні ділянки відрізняються взимку?\n3. Змініть кількість зон K у кроці 4. Яка зона відповідає центральній «зірці» з екзотами?\n4. Картосхема парку в буклеті коледжу (lltk.edu.ua/pro-koledzh/dendropark) показує зірку в центрі і 14 кварталів навколо. Прив'яжіть її до знімка в QGIS (Georeferencer) і порівняйте межі кварталів із картою висот крон.\n5. Попросіть вбудованого асистента Colab (кнопка ✦) пояснити будь-яку комірку. Перевірте, чи пояснення правильне.\n\n**Джерела даних:** Esri World Imagery; Meta & WRI Global Canopy Height (Tolan et al., 2024); Copernicus Sentinel-2; Google DeepMind AlphaEarth Foundations Satellite Embedding; SAM (Meta AI).",
+"md:## Далі\n\nУ цьому ноутбуці ви пройшли шлях фахівця з дистанційного моніторингу лісів: межа парку, висота крон, сезонна динаміка і зони, знайдені штучним інтелектом. Цих методів навчають у Навчально-науковому інституті лісового і садово-паркового господарства НУБіП України (nubip.edu.ua).\n\n**Джерела даних:** Esri World Imagery; Meta & WRI Global Canopy Height (Tolan et al., 2024); Copernicus Sentinel-2; Cloud Score+ (Pasquarella et al., 2023); AlphaEarth Foundations Satellite Embedding (Brown et al., 2025); SAM (Meta AI). Межа парку – картосхема з буклета коледжу (lltk.edu.ua/pro-koledzh/dendropark).",
+
 ]
 
 
