@@ -61,6 +61,48 @@ def quarters_utm():
         q = max(out, key=lambda k: out[k].buffer(0.5).intersection(gp.boundary).length)
         g = unary_union([out[q], gp]).buffer(0.05, join_style=2).buffer(-0.05, join_style=2)
         out[q] = g if g.geom_type == 'Polygon' else max(g.geoms, key=lambda h: h.area)
+    return fit_to_boundary(out) if FIT_USER else out
+
+
+FIT_USER = True
+
+
+def fit_to_boundary(Q, cell=1.0, tol=2.0):
+    """Fit the georeferenced quarters into the author's straight-line boundary (tools/user_boundary.py):
+    clip to it and let the edge quarters grow into the uncovered strips (nearest quarter, 1 m raster), so the
+    inner quarter lines simply continue to the boundary."""
+    from user_boundary import user_polygon
+    from rasterio.features import rasterize, shapes
+    from rasterio.transform import from_origin
+    from shapely.geometry import shape
+    from shapely import coverage_simplify
+    from scipy import ndimage as ndi
+    U = user_polygon()
+    x0, y0, x1, y1 = U.buffer(20).bounds
+    W, H = int((x1 - x0) / cell), int((y1 - y0) / cell)
+    T = from_origin(x0, y1, cell, cell)
+    L = rasterize([(p, q) for q, p in Q.items()], out_shape=(H, W), transform=T, fill=0, dtype='int32')
+    inside = rasterize([(U, 1)], out_shape=(H, W), transform=T, fill=0, dtype='uint8').astype(bool)
+    idx = ndi.distance_transform_edt(L == 0, return_distances=False, return_indices=True)
+    L = L[idx[0], idx[1]]; L[~inside] = 0
+    P = {}
+    for geom, v in shapes(L, mask=L > 0, transform=T, connectivity=4):
+        g = shape(geom); q = int(v)
+        P[q] = g if q not in P else P[q].union(g)
+    one = lambda g: g if g.geom_type == 'Polygon' else max(g.geoms, key=lambda h: h.area)
+    keys = sorted(P)
+    simp = coverage_simplify([Polygon(one(P[q]).exterior) for q in keys], tolerance=tol)
+    out = {}
+    for q, g in zip(keys, simp):
+        g = g.intersection(U)
+        out[q] = one(g.buffer(0))
+    # pin the outer edge exactly to the author's boundary
+    gaps = U.difference(unary_union(list(out.values())))
+    for gp in getattr(gaps, 'geoms', [gaps]):
+        if gp.is_empty or gp.area < 0.5:
+            continue
+        q = max(out, key=lambda k: out[k].buffer(0.3).intersection(gp.boundary).length)
+        out[q] = one(unary_union([out[q], gp]).buffer(0.02, join_style=2).buffer(-0.02, join_style=2))
     return out
 
 
