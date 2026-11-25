@@ -1,0 +1,7 @@
+# Esri World Imagery is not redistributed: scripts expect local copies
+data/esri/
+data/zoom/
+data/raw/
+media/
+assets/
+__pycache__/
