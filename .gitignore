@@ -16,3 +16,7 @@ tools/georef.py
 tools/media.py
 tools/ortho.py
 data/park2.npz
+data/lltk/q/*.png
+tail_preview.jpg
+data/raw3/
+data/park3_txt.txt

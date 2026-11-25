@@ -54,9 +54,9 @@ def cmap(stops):
 def hx(s): return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
 CM_H = cmap([(0, hx("F4F1E8")), (.2, hx("D9E3C3")), (.48, hx("8DB87F")), (.72, hx("3B7B58")), (1, hx("0C3A34"))])
 CM_N = cmap([(0, hx("8C6D3F")), (.32, hx("D8C9A0")), (.58, hx("B5D19A")), (.8, hx("4E9A5B")), (1, hx("0C3A34"))])
-ZNAME = ["забудова й дороги по краю", "розсадник", "узлісся і молоді насадження", "лісові насадження"]
+ZNAME = ["", "інші землі", "узлісся, галявини й молоді насадження", "зімкнені лісові насадження"]
 ZCOL = [hx("C9C4B8"), hx("E3D7B4"), hx("8DB87F"), hx("2F6B4F")]
-ZMAP = {2: 0, 3: 1, 4: 2, 1: 2, 0: 3}                 # k-means id -> display class
+ZMAP = {0: 3, 1: 2, 4: 2, 2: 1, 3: 1}                 # k-means id -> display class (by canopy height)
 
 def colorize(v, cm, vmin, vmax, base=None, alpha=1.0, dim=0.35):
     b = BASE * (1 - dim) if base is None else base
@@ -152,11 +152,12 @@ def colorbar(dr, x, y, cm, vmin, vmax, ticks, unit, w=470, h=28):
     if unit: label(dr, (x + w + 14, y + h // 2), unit, 28, fill=TXT, b=False, anchor="lm")
 
 def zone_legend(dr, x, y, alpha=1.0, areas=None):
-    for k in (3, 2, 1, 0):
-        yy = y + (3 - k) * 62
+    for k in (3, 2, 1):
+        yy = y + (3 - k) * (110 if areas is not None else 62)
         dr.rectangle((x, yy, x + 38, yy + 38), fill=ZCOL[k] + (int(255 * alpha),))
-        t = ZNAME[k] + (f", {areas[k]:.1f} га".replace(".", ",") if areas is not None else "")
-        label(dr, (x + 56, yy + 19), t, 32, fill=TXT + (int(255 * alpha),), b=False, anchor="lm")
+        label(dr, (x + 56, yy + 19), ZNAME[k], 32, fill=TXT + (int(255 * alpha),), b=False, anchor="lm")
+        if areas is not None:
+            label(dr, (x + 56, yy + 62), f"{areas[k]:.1f} га".replace(".", ","), 34, fill=TXT, b=True, anchor="lm")
 
 # ------------------------------------------------------------------ 1. zoom from space
 def zoom_video():
@@ -204,78 +205,72 @@ def zoom_video():
         L = [n for n in nice if n <= gw / 5000][-1]; px = W * L * 1000 / gw
         dr.rectangle((40, H - 60, 40 + px, H - 52), fill=(255, 255, 255, 235))
         label(dr, (40, H - 70), f"{L:g} км" if L >= 1 else f"{int(L * 1000)} м", 30, fill=WHITE, anchor="lb")
-        nm = names[min(int(round(z)), 4)] + (", 32 га" if t > T2 + 0.8 else "")
+        nm = names[min(int(round(z)), 4)]
         label(dr, (W - 40, 50), nm, 40, fill=WHITE, anchor="ra", bg=(12, 58, 52, 200), pad=12)
         wv.add(fr)
     wv.close()
 
 # ------------------------------------------------------------------ 2. map scheme georeferencing
 def scheme_video():
-    Sc = np.asarray(Image.open("data/lltk/scheme_clean.png").convert("RGB")).astype(float)
-    msk = np.asarray(Image.open("data/lltk/scheme_mask.png")) > 0
-    P_, _ = B.affine(); fwd = lambda a: B.fwd(a, P_)
-    yy, xx = np.mgrid[0:Sc.shape[0], 0:Sc.shape[1]]
-    sel = msk | (Sc.sum(-1) < 400)
-    px, py = xx[sel].astype(float), yy[sel].astype(float); col = Sc[sel]
-    dark = Sc[sel].sum(-1) < 420
-    core = Sc[sel].sum(-1) < 300
-    tgt = fwd(np.c_[px, py])                                       # warped UTM positions
-    # start: scheme north-up, same size, centred on the park
-    s0 = 1.36; b_ = POLY.bounds; c0 = np.array([(b_[0] + b_[2]) / 2, (b_[1] + b_[3]) / 2 + 10])
-    src = np.c_[(px - 245) * s0 + c0[0], -(py - 285) * s0 + c0[1]]
+    """Vector quarter scheme (68 digitised quarters) morphs from the scheme onto the image."""
+    import quarters_georef as QG
+    from skimage.transform import ProjectiveTransform
+    Ppx = {int(q): np.array(c) for q, c in json.load(open("data/lltk/q/quarters_px.json")).items()}
+    Pb, Ht, _ = QG.transforms()
+    final = QG.quarters_utm()
+    tgt = {q: (Ht(c) if q in QG.TAIL else np.c_[c, np.ones(len(c))] @ Pb) for q, c in Ppx.items()}
+    c0 = np.array([(VX0 + VX1) / 2, (VY0 + VY1) / 2])           # scheme starts north-up in the middle of the view
+    s0 = 1.62
+    src = {q: np.c_[(c[:, 0] - 220) * s0 + c0[0], -(c[:, 1] - 240) * s0 + c0[1]] for q, c in Ppx.items()}
+    SS = 2                                                          # supersampling for smooth lines
+    def to_px(xy):
+        return [((x - VX0) * S * SS, (VY1 - y) * S * SS) for x, y in xy]
     base = Image.fromarray(BASE.astype(np.uint8))
-    wv = Writer("scheme_georef")
-    Pinv = np.linalg.inv(np.c_[P_, [0, 0, 1]])
-    uvw = np.c_[VX.ravel(), VY.ravel(), np.ones(VX.size)] @ Pinv
-    U_, V_ = uvw[:, 0].reshape(VX.shape), uvw[:, 1].reshape(VX.shape)
-    darkness = np.clip((360 - Sc.sum(-1)) / 110, 0, 1)
-    LINEA = map_coordinates(darkness, [V_, U_], order=1, cval=0)
-    LINEA = np.clip(LINEA * 1.2, 0, 0.95)
-    def render(alpha, t, lines_only=False):
-        if lines_only and t >= 1.0:
-            a = (alpha * LINEA)[..., None]
-            return to_img(BASE * (1 - a) + np.array(LINEC) * a)
-        P = src * (1 - t) + tgt * t
-        cxp = ((P[:, 0] - VX0) * S).astype(int); cyp = ((VY1 - P[:, 1]) * S).astype(int)
-        img = BASE.copy()
-        ok = (cxp >= 0) & (cxp < MW - 1) & (cyp >= 0) & (cyp < MH - 1)
-        acc = np.zeros((MH, MW, 3)); cnt = np.zeros((MH, MW))
-        cc = np.where(dark[:, None], [40, 30, 20], col)
-        for dx, dy in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-            np.add.at(acc, (cyp[ok] + dy, cxp[ok] + dx), cc[ok])
-            np.add.at(cnt, (cyp[ok] + dy, cxp[ok] + dx), 1)
-        hit = cnt > 0
-        mix = np.where(hit[..., None], acc / np.maximum(cnt, 1)[..., None], img)
-        a = alpha * 0.85
-        return to_img(img * (1 - a * hit[..., None]) + mix * a * hit[..., None])
+    def render(t, fill_a=0.55, line=(255, 236, 160), lw=2, numbers=True, use_final=False, gcp=None, show=1.0):
+        im = base.resize((MW * SS, MH * SS), Image.BILINEAR).convert("RGBA")
+        ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(ov)
+        polys = {q: (np.array(final[q].exterior.coords) if use_final else src[q] * (1 - t) + tgt[q] * t) for q in Ppx}
+        for q, c in polys.items():
+            dr.polygon(to_px(c), fill=(18, 70, 52, int(255 * fill_a * show)), outline=line + (int(255 * show),), width=lw * SS)
+        if numbers:
+            f = font(13 * SS, True)
+            for q, c in polys.items():
+                p = Polygon(c).representative_point(); x, y = to_px([(p.x, p.y)])[0]
+                dr.text((x, y), str(q), font=f, fill=(255, 255, 255, int(255 * show)), anchor="mm")
+        if gcp:
+            for x, y in gcp:
+                dr.ellipse((x - 10 * SS, y - 10 * SS, x + 10 * SS, y + 10 * SS), fill=(12, 58, 52, 255), outline=(255, 255, 255, 255), width=3 * SS)
+        im = Image.alpha_composite(im, ov).convert("RGB")
+        return im.resize((MW, MH), Image.LANCZOS)
     def leg_steps(k):
         def f(dr, x, y):
-            steps = ["картосхема з буклета коледжу", "опорні точки на знімку", "афінне перетворення", "межі збігаються"]
+            steps = ["схема кварталів коледжу", "оцифрування: 68 кварталів", "опорні точки на знімку",
+                     "афінне перетворення", "векторна межа парку"]
             for i, s_ in enumerate(steps):
                 on = i <= k
                 dr.rectangle((x, y + i * 60 + 6, x + 22, y + i * 60 + 28), fill=(DARK if on else (200, 199, 191)))
                 label(dr, (x + 40, y + i * 60 + 17), s_, 33, fill=(TXT if on else (170, 170, 165)), b=False, anchor="lm")
         return f
-    T = "Картосхема і знімок"
-    wv.add(frame(base, T, ["прив'язка (геореференсування)"], leg_steps(-1)), int(0.8 * FPS))
+    T, SUB = "Квартали і знімок", ["прив'язка (геореференсування)"]
+    wv = Writer("scheme_georef")
+    wv.add(frame(base, T, SUB, leg_steps(-1)), int(0.8 * FPS))
     for i in range(int(1.0 * FPS)):
-        wv.add(frame(render(ease(i / FPS), 0.0), T, ["прив'язка (геореференсування)"], leg_steps(0)))
-    g = json.load(open("data/lltk/gcp.json")); gp = [((a[1][0] - VX0) * S, (VY1 - a[1][1]) * S) for a in g]
+        wv.add(frame(render(0, numbers=False, show=ease(i / FPS)), T, SUB, leg_steps(0)))
     for i in range(int(1.0 * FPS)):
-        im = render(1, 0.0); dr = ImageDraw.Draw(im)
-        for j, (x, y) in enumerate(gp):
-            if j <= i * len(gp) / FPS:
-                dr.ellipse((x - 11, y - 11, x + 11, y + 11), fill=(12, 58, 52), outline=WHITE, width=4)
-        wv.add(frame(im, T, ["прив'язка (геореференсування)"], leg_steps(1)))
-    for i in range(int(3.0 * FPS)):
-        t = ease(i / (3.0 * FPS))
-        wv.add(frame(render(1, t), T, ["прив'язка (геореференсування)"], leg_steps(2)))
+        wv.add(frame(render(0, show=1, numbers=True), T, SUB, leg_steps(1)))
+    g = json.load(open("data/lltk/gcp.json")); gt = json.load(open("data/lltk/q/gcp_tail.json"))
+    gp = [((a[1][0] - VX0) * S * SS, (VY1 - a[1][1]) * S * SS) for a in g]
+    gp += [((OX0 + a[1][0] * ORES - VX0) * S * SS, (VY1 - (OY1 - a[1][1] * ORES)) * S * SS) for a in gt[2:]]
     for i in range(int(1.2 * FPS)):
-        u = ease(i / (1.2 * FPS))
-        a = render(1 - u, 1.0); b_ = render(u, 1.0, lines_only=True)
-        wv.add(frame(Image.blend(a, b_, u), T, ["прив'язка (геореференсування)"], leg_steps(2)))
-    fin = draw_boundary(render(1, 1.0, lines_only=True), w=4, color=WHITE)
-    fin = frame(fin, T, ["прив'язка (геореференсування)"], leg_steps(3))
+        n = int(len(gp) * min(1, (i + 1) / (0.9 * FPS)))
+        wv.add(frame(render(0, gcp=gp[:n]), T, SUB, leg_steps(2)))
+    for i in range(int(3.0 * FPS)):
+        wv.add(frame(render(ease(i / (3.0 * FPS)), gcp=gp), T, SUB, leg_steps(3)))
+    for i in range(int(1.0 * FPS)):
+        u = ease(i / FPS)
+        wv.add(frame(render(1, use_final=True, fill_a=0.55 * (1 - u) + 0.12 * u), T, SUB, leg_steps(3)))
+    fin = draw_boundary(render(1, use_final=True, fill_a=0.12), w=4, color=WHITE)
+    fin = frame(fin, T, SUB, leg_steps(4))
     wv.add(fin, int(2.5 * FPS)); wv.close(fin)
 
 # ------------------------------------------------------------------ 3. layers
@@ -378,9 +373,9 @@ def zones_video():
         ys, xs = np.where(edge & INSIDE)
         for x, y in zip(xs[::2], ys[::2]): dr.point((x, y), fill=WHITE)
     draw_boundary(fin)
-    fin = frame(fin, "4 типи ділянок", ["площі у межах парку"], lambda dr, x, y: zone_legend(dr, x, y, areas=area))
+    fin = frame(fin, "3 типи ділянок", ["площі у межах парку"], lambda dr, x, y: zone_legend(dr, x, y, areas=area))
     wv.add(fin, int(3 * FPS)); wv.close(fin)
-    json.dump({"zone_area_ha": dict(zip(ZNAME, [round(a, 2) for a in area]))}, open("data/zones_area.json", "w"), ensure_ascii=False)
+    json.dump({"zone_area_ha": {ZNAME[k]: round(area[k], 2) for k in (1, 2, 3)}}, open("data/zones_area.json", "w"), ensure_ascii=False)
 
 # ------------------------------------------------------------------ 6. 3D canopy
 def canopy3d_video(nfr=200, ex=2.0):
