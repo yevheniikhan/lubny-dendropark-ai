@@ -119,7 +119,7 @@ m""",
 # sam.show_anns(cmap='Greens', add_boxes=False, alpha=0.6, title='Крони, знайдені SAM')
 # sam.raster_to_vector('park_mask.tif', 'tree_crowns.gpkg')   # полігони для QGIS""",
 
-"md:## Завдання\n\n1. Знайдіть на карті висот найвищу ділянку парку. Яка це порода? Перевірте в парку.\n2. У якому місяці NDVI найвищий? Чому листопадні й хвойні ділянки відрізняються взимку?\n3. Змініть кількість зон K у кроці 4. Яка зона відповідає центральній «зірці» з екзотами?\n4. Попросіть вбудованого асистента Colab (кнопка ✦) пояснити будь-яку комірку. Перевірте, чи пояснення правильне.\n\n**Джерела даних:** Esri World Imagery; Meta & WRI Global Canopy Height (Tolan et al., 2024); Copernicus Sentinel-2; Google DeepMind AlphaEarth Foundations Satellite Embedding; SAM (Meta AI).",
+"md:## Завдання\n\n1. Знайдіть на карті висот найвищу ділянку парку. Яка це порода? Перевірте в парку.\n2. У якому місяці NDVI найвищий? Чому листопадні й хвойні ділянки відрізняються взимку?\n3. Змініть кількість зон K у кроці 4. Яка зона відповідає центральній «зірці» з екзотами?\n4. Картосхема парку в буклеті коледжу (lltk.edu.ua/pro-koledzh/dendropark) показує зірку в центрі і 14 кварталів навколо. Прив'яжіть її до знімка в QGIS (Georeferencer) і порівняйте межі кварталів із картою висот крон.\n5. Попросіть вбудованого асистента Colab (кнопка ✦) пояснити будь-яку комірку. Перевірте, чи пояснення правильне.\n\n**Джерела даних:** Esri World Imagery; Meta & WRI Global Canopy Height (Tolan et al., 2024); Copernicus Sentinel-2; Google DeepMind AlphaEarth Foundations Satellite Embedding; SAM (Meta AI).",
 ]
 
 
