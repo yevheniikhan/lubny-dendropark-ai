@@ -1,6 +1,6 @@
 import sys, glob
 ok={}
-for f in sorted(glob.glob('/home/claude/lubny/data/raw2/z*.txt')):
+for f in sorted(glob.glob('/home/claude/lubny/data/'+__import__('os').environ.get('RAW','raw2')+'/z*.txt')):
     for line in open(f):
         line=line.strip()
         if not line: continue

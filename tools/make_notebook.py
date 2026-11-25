@@ -34,7 +34,7 @@ except Exception:
     ee.Authenticate(); ee.Initialize(project=PROJECT)
 
 # Дендропарк імені В. Д. Байтали, Лубни. Межа – картосхема з буклета коледжу, прив'язана до знімка
-# сплайном тонкої пластини (опорні точки: data/lltk/gcp.json у репозиторії).
+# афінним перетворенням за 12 опорними точками (data/lltk/gcp.json у репозиторії).
 PARK = ee.Geometry.Polygon(PARK_COORDS)
 CENTER = PARK.centroid(1).coordinates().getInfo()[::-1]
 UTM = 'EPSG:32636'                    # метрична проєкція для зони 36N

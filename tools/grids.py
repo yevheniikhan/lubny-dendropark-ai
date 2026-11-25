@@ -2,8 +2,8 @@
 import numpy as np, json
 from shapely.geometry import Polygon
 from shapely import contains_xy
-X0, Y1 = 498900, 5537360
-d = np.load('data/park2.npz')
+X0, Y1 = 498880, 5537360
+d = np.load('data/park3.npz')
 POLY = Polygon(json.load(open('data/park_boundary.json'))['utm'])
 def mask(shape, cell):
     r, c = np.mgrid[0:shape[0], 0:shape[1]]

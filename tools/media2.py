@@ -25,10 +25,10 @@ POLY = G.POLY
 CHM, NDVI, ZONE = G.load()
 OX0, OY1, ORES = 498880, 5537400, 0.5
 ORTHO = np.asarray(Image.open("data/esri/ortho2_utm.png").convert("RGB")).astype(float)
-VX0, VX1, VY0, VY1 = 498930, 499640, 5536470, 5537330
+VX0, VX1, VY0, VY1 = 498880, 499650, 5536460, 5537340
 S = H / (VY1 - VY0)                                   # px per metre, map 594 x 720
 MW, MH = int(round((VX1 - VX0) * S)), H
-GX0, GY1 = 498900, 5537360
+GX0, GY1 = 498880, 5537360
 
 def view_xy(w=MW, h=MH, x0=VX0, y1=VY1, s=S):
     c, r = np.meshgrid(np.arange(w) + .5, np.arange(h) + .5)
@@ -54,9 +54,9 @@ def cmap(stops):
 def hx(s): return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
 CM_H = cmap([(0, hx("F4F1E8")), (.2, hx("D9E3C3")), (.48, hx("8DB87F")), (.72, hx("3B7B58")), (1, hx("0C3A34"))])
 CM_N = cmap([(0, hx("8C6D3F")), (.32, hx("D8C9A0")), (.58, hx("B5D19A")), (.8, hx("4E9A5B")), (1, hx("0C3A34"))])
-ZNAME = ["розсадник і відкриті ділянки", "узлісся вздовж забудови", "насадження середньої висоти", "високі насадження"]
-ZCOL = [hx("E3D7B4"), hx("B4BDA4"), hx("7FAE7A"), hx("2F6B4F")]
-ZMAP = {2: 0, 0: 1, 4: 1, 3: 2, 1: 3}                 # k-means id -> display class
+ZNAME = ["забудова й дороги по краю", "розсадник", "узлісся і молоді насадження", "лісові насадження"]
+ZCOL = [hx("C9C4B8"), hx("E3D7B4"), hx("8DB87F"), hx("2F6B4F")]
+ZMAP = {2: 0, 3: 1, 4: 2, 1: 2, 0: 3}                 # k-means id -> display class
 
 def colorize(v, cm, vmin, vmax, base=None, alpha=1.0, dim=0.35):
     b = BASE * (1 - dim) if base is None else base
@@ -213,36 +213,44 @@ def zoom_video():
 def scheme_video():
     Sc = np.asarray(Image.open("data/lltk/scheme_clean.png").convert("RGB")).astype(float)
     msk = np.asarray(Image.open("data/lltk/scheme_mask.png")) > 0
-    fwd, inv = B.tps()
+    P_, _ = B.affine(); fwd = lambda a: B.fwd(a, P_)
     yy, xx = np.mgrid[0:Sc.shape[0], 0:Sc.shape[1]]
     sel = msk | (Sc.sum(-1) < 400)
     px, py = xx[sel].astype(float), yy[sel].astype(float); col = Sc[sel]
     dark = Sc[sel].sum(-1) < 420
+    core = Sc[sel].sum(-1) < 300
     tgt = fwd(np.c_[px, py])                                       # warped UTM positions
     # start: scheme north-up, same size, centred on the park
     s0 = 1.36; b_ = POLY.bounds; c0 = np.array([(b_[0] + b_[2]) / 2, (b_[1] + b_[3]) / 2 + 10])
     src = np.c_[(px - 245) * s0 + c0[0], -(py - 285) * s0 + c0[1]]
     base = Image.fromarray(BASE.astype(np.uint8))
     wv = Writer("scheme_georef")
+    Pinv = np.linalg.inv(np.c_[P_, [0, 0, 1]])
+    uvw = np.c_[VX.ravel(), VY.ravel(), np.ones(VX.size)] @ Pinv
+    U_, V_ = uvw[:, 0].reshape(VX.shape), uvw[:, 1].reshape(VX.shape)
+    darkness = np.clip((360 - Sc.sum(-1)) / 110, 0, 1)
+    LINEA = map_coordinates(darkness, [V_, U_], order=1, cval=0)
+    LINEA = np.clip(LINEA * 1.2, 0, 0.95)
     def render(alpha, t, lines_only=False):
+        if lines_only and t >= 1.0:
+            a = (alpha * LINEA)[..., None]
+            return to_img(BASE * (1 - a) + np.array(LINEC) * a)
         P = src * (1 - t) + tgt * t
         cxp = ((P[:, 0] - VX0) * S).astype(int); cyp = ((VY1 - P[:, 1]) * S).astype(int)
         img = BASE.copy()
         ok = (cxp >= 0) & (cxp < MW - 1) & (cyp >= 0) & (cyp < MH - 1)
         acc = np.zeros((MH, MW, 3)); cnt = np.zeros((MH, MW))
-        cc = np.where(dark[:, None], [40, 30, 20], col) if not lines_only else np.tile(LINEC, (len(col), 1))
-        keep = ok & (dark if lines_only else True)
-        for dx in (0, 1):
-            for dy in (0, 1):
-                np.add.at(acc, (cyp[keep] + dy, cxp[keep] + dx), cc[keep])
-                np.add.at(cnt, (cyp[keep] + dy, cxp[keep] + dx), 1)
+        cc = np.where(dark[:, None], [40, 30, 20], col)
+        for dx, dy in [(0, 0), (0, 1), (1, 0), (1, 1)]:
+            np.add.at(acc, (cyp[ok] + dy, cxp[ok] + dx), cc[ok])
+            np.add.at(cnt, (cyp[ok] + dy, cxp[ok] + dx), 1)
         hit = cnt > 0
         mix = np.where(hit[..., None], acc / np.maximum(cnt, 1)[..., None], img)
-        a = alpha * (0.95 if lines_only else 0.85)
+        a = alpha * 0.85
         return to_img(img * (1 - a * hit[..., None]) + mix * a * hit[..., None])
     def leg_steps(k):
         def f(dr, x, y):
-            steps = ["картосхема з буклета коледжу", "опорні точки на знімку", "сплайн вирівнює креслення", "межі збігаються"]
+            steps = ["картосхема з буклета коледжу", "опорні точки на знімку", "афінне перетворення", "межі збігаються"]
             for i, s_ in enumerate(steps):
                 on = i <= k
                 dr.rectangle((x, y + i * 60 + 6, x + 22, y + i * 60 + 28), fill=(DARK if on else (200, 199, 191)))
@@ -252,7 +260,7 @@ def scheme_video():
     wv.add(frame(base, T, ["прив'язка (геореференсування)"], leg_steps(-1)), int(0.8 * FPS))
     for i in range(int(1.0 * FPS)):
         wv.add(frame(render(ease(i / FPS), 0.0), T, ["прив'язка (геореференсування)"], leg_steps(0)))
-    g = json.load(open("data/lltk/gcp.json")); gp = [((x - VX0) * S, (VY1 - y) * S) for _, (x, y) in g]
+    g = json.load(open("data/lltk/gcp.json")); gp = [((a[1][0] - VX0) * S, (VY1 - a[1][1]) * S) for a in g]
     for i in range(int(1.0 * FPS)):
         im = render(1, 0.0); dr = ImageDraw.Draw(im)
         for j, (x, y) in enumerate(gp):

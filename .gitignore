@@ -15,3 +15,4 @@ data/park2_txt.txt
 tools/georef.py
 tools/media.py
 tools/ortho.py
+data/park2.npz

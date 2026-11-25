@@ -1,7 +1,7 @@
 import glob, zlib, sys
 A='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ch={}
-for f in sorted(glob.glob('/home/claude/lubny/data/raw2/z*.txt')):
+for f in sorted(glob.glob('/home/claude/lubny/data/'+__import__('os').environ.get('RAW','raw2')+'/z*.txt')):
     for line in open(f):
         if line.strip():
             i,rest=line.strip().split(' ',1); ch[int(i)]=rest.rsplit(' #',1)[0].replace(' ','')
@@ -14,5 +14,5 @@ for k in range(0,len(s),11):
     out+=n.to_bytes(8,'big')
 out=bytes(out[:n_bytes])
 txt=zlib.decompress(out,-15).decode()
-open('/home/claude/lubny/data/park2_txt.txt','w').write(txt)
+open('/home/claude/lubny/data/'+__import__('os').environ.get('OUTTXT','park2_txt.txt'),'w').write(txt)
 print(len(s),len(txt),[l[:12] for l in txt.split('\n')])
